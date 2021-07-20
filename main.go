@@ -2,70 +2,67 @@ package main
 
 import (
 	"fmt"
-	"sync"
 )
 
 type zeroEvenOdd struct {
-	n  int
-	zz chan int
-	zo chan int
-	ze chan int
-	wg sync.WaitGroup
+	n    int
+	done chan struct{}
+	zz   chan int
+	zo   chan int
+	ze   chan int
 }
 
 func newZeroEvenOdd(n int) *zeroEvenOdd {
-	z := &zeroEvenOdd{
-		n:  n,
-		zz: make(chan int),
-		zo: make(chan int),
-		ze: make(chan int),
+	return &zeroEvenOdd{
+		n:    n,
+		done: make(chan struct{}),
+		zz:   make(chan int),
+		zo:   make(chan int),
+		ze:   make(chan int),
 	}
-	z.wg.Add(3)
-	return z
+}
+
+func (z *zeroEvenOdd) start() {
+	z.zz <- 0
 }
 
 func (z *zeroEvenOdd) printNumber(n int) {
 	fmt.Print(n)
 }
 
-func zero(z *zeroEvenOdd) {
+func (z *zeroEvenOdd) zero() {
+	ch := [2]chan int{z.zo, z.ze}
 	for i := 0; i < z.n; i++ {
 		z.printNumber(<-z.zz)
-		if i%2 == 0 {
-			z.zo <- i + 1
-		} else {
-			z.ze <- i + 1
-		}
+		ch[i%2] <- i + 1
 	}
 	close(z.ze)
 	close(z.zo)
 	<-z.zz
 	close(z.zz)
-	z.wg.Done()
+	close(z.done)
 }
 
-func odd(z *zeroEvenOdd) {
+func (z *zeroEvenOdd) odd() {
 	for v := range z.zo {
 		z.printNumber(v)
 		z.zz <- 0
 	}
-	z.wg.Done()
 }
 
-func even(z *zeroEvenOdd) {
+func (z *zeroEvenOdd) even() {
 	for v := range z.ze {
 		z.printNumber(v)
 		z.zz <- 0
 	}
-	z.wg.Done()
 }
 
 func main() {
-	z := newZeroEvenOdd(10)
-	go zero(z)
-	go odd(z)
-	go even(z)
-	z.zz <- 0
-	z.wg.Wait()
+	z := newZeroEvenOdd(6)
+	go z.odd()
+	go z.zero()
+	go z.even()
+	z.start()
+	<-z.done
 	fmt.Println()
 }
